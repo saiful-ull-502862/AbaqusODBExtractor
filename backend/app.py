@@ -1329,6 +1329,18 @@ def open_folder():
     return jsonify({"status": "opened"})
 
 
+@app.route("/assets/<path:filename>")
+def serve_assets(filename):
+    """Serve static assets with correct MIME types (fixes Windows issue)."""
+    mimemap = {".js": "application/javascript", ".css": "text/css",
+               ".map": "application/json", ".woff2": "font/woff2"}
+    ext = os.path.splitext(filename)[1].lower()
+    resp = send_from_directory(os.path.join(app.static_folder, "assets"), filename)
+    if ext in mimemap:
+        resp.headers["Content-Type"] = mimemap[ext]
+    return resp
+
+
 @app.route("/")
 def serve_index():
     """Serve the built frontend."""
