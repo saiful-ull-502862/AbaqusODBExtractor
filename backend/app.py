@@ -418,6 +418,7 @@ INVARIANT_MAP = {{
     'Max. In-Plane Principal':  MAX_INPLANE_PRINCIPAL,
     'Min. In-Plane Principal':  MIN_INPLANE_PRINCIPAL,
     'Out-of-Plane Principal':   OUTOFPLANE_PRINCIPAL,
+    'Magnitude':                MAGNITUDE,
 }}
 
 INVARIANT_ATTR = {{
@@ -431,6 +432,7 @@ INVARIANT_ATTR = {{
     'Max. In-Plane Principal':  'maxInPlanePrincipal',
     'Min. In-Plane Principal':  'minInPlanePrincipal',
     'Out-of-Plane Principal':   'outOfPlanePrincipal',
+    'Magnitude':                'magnitude',
 }}
 
 

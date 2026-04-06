@@ -139,9 +139,25 @@ export default function RegionConfig() {
       </div>
 
       {/* Region Dimensions */}
-      <div className="grid grid-cols-2 gap-4">
-        <NumberInput label="Region Width" value={s.regionWidth} onChange={s.setRegionWidth} unit="um" />
-        <NumberInput label="Region Height" value={s.regionHeight} onChange={s.setRegionHeight} unit="um" />
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-4">
+          <NumberInput label="Region Width (Base Distance X)" value={s.regionWidth} onChange={s.setRegionWidth} unit="um" hint="Width of each extraction region" />
+          <NumberInput label="Region Height (Base Distance Y)" value={s.regionHeight} onChange={s.setRegionHeight} unit="um" hint="Height of each extraction region" />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500">Quick presets:</span>
+          {[20, 40, 80, 120, 160, 200].map(v => (
+            <button
+              key={v}
+              onClick={() => { s.setRegionWidth(v); s.setRegionHeight(v); s.setXOffset(v); s.setYOffset(v); }}
+              className={`px-2.5 py-1 rounded text-xs border transition ${
+                s.regionWidth === v && s.regionHeight === v
+                  ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                  : 'border-gray-700 text-gray-400 hover:bg-gray-800'
+              }`}
+            >{v} um</button>
+          ))}
+        </div>
       </div>
 
       {/* Sweep Axis Toggles */}

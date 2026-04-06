@@ -14,6 +14,7 @@ const CARTILAGE_PRESET = [
   { fieldKey: 'POR', compOrInv: null, label: 'POR' },
   { fieldKey: 'FLVEL', compOrInv: 'FLVEL1', label: 'FLVEL1' },
   { fieldKey: 'FLVEL', compOrInv: 'FLVEL2', label: 'FLVEL2' },
+  { fieldKey: 'FLVEL', compOrInv: 'Magnitude', label: 'FLVEL_Mag' },
 ]
 
 // All predefined outputs with metadata
@@ -63,6 +64,7 @@ export const ALL_OUTPUTS = {
       { fieldKey: 'FLVEL', compOrInv: 'FLVEL1', label: 'FLVEL1', desc: 'Fluid velocity, X' },
       { fieldKey: 'FLVEL', compOrInv: 'FLVEL2', label: 'FLVEL2', desc: 'Fluid velocity, Y' },
       { fieldKey: 'FLVEL', compOrInv: 'FLVEL3', label: 'FLVEL3', desc: 'Fluid velocity, Z' },
+      { fieldKey: 'FLVEL', compOrInv: 'Magnitude', label: 'FLVEL_Mag', desc: 'Fluid velocity, Resultant (magnitude)' },
     ],
   },
   other: {
