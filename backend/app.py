@@ -4,6 +4,7 @@ Provides APIs for file browsing, ODB scanning, script generation, and execution.
 """
 
 import json
+import mimetypes
 import os
 import subprocess
 import sys
@@ -15,6 +16,10 @@ from pathlib import Path
 
 from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
+
+# Fix MIME types on Windows (Python may serve .js as text/plain)
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 CORS(app)
