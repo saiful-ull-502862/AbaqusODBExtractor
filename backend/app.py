@@ -107,8 +107,11 @@ def detect_abaqus():
             continue
         try:
             use_shell = sys.platform == "win32" and abaqus_cmd.lower().endswith(".bat")
+            cmd = [abaqus_cmd, "information=release"]
+            if use_shell:
+                cmd = subprocess.list2cmdline(cmd)
             result = subprocess.run(
-                [abaqus_cmd, "information=release"],
+                cmd,
                 capture_output=True, text=True, timeout=15,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
                 shell=use_shell,
@@ -315,8 +318,11 @@ def scan_odb():
     try:
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         use_shell = sys.platform == "win32" and abaqus_cmd.lower().endswith(".bat")
+        cmd = [abaqus_cmd, "cae", "noGUI=%s" % probe_script]
+        if use_shell:
+            cmd = subprocess.list2cmdline(cmd)
         result = subprocess.run(
-            [abaqus_cmd, "cae", "noGUI=%s" % probe_script],
+            cmd,
             capture_output=True, text=True, timeout=300,
             cwd=temp_dir, creationflags=flags, shell=use_shell,
         )
@@ -1001,6 +1007,9 @@ def run_script():
 
     if not working_dir:
         working_dir = os.path.dirname(script_path)
+    # Ensure working directory exists and is valid
+    if not working_dir or not os.path.isdir(working_dir):
+        working_dir = tempfile.gettempdir()
 
     # Clear log queue
     while not _log_queue.empty():
@@ -1022,8 +1031,10 @@ def run_script():
 
     try:
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-        # On Windows, .bat files must be run via shell
+        # On Windows, .bat files must be run via shell with a string command
         use_shell = sys.platform == "win32" and abaqus_cmd.lower().endswith(".bat")
+        if use_shell:
+            cmd = subprocess.list2cmdline(cmd)
         _process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, cwd=working_dir, creationflags=flags,
@@ -1032,7 +1043,7 @@ def run_script():
         _run_start_time = time.time()
         _run_status = "running"
 
-        _log_queue.put("[SYSTEM] Started: %s" % " ".join(cmd))
+        _log_queue.put("[SYSTEM] Started: %s" % (cmd if isinstance(cmd, str) else " ".join(cmd)))
         _log_queue.put("[SYSTEM] Working directory: %s" % working_dir)
 
         # Start output streaming thread
