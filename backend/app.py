@@ -97,10 +97,12 @@ def detect_abaqus():
         if not abaqus_cmd:
             continue
         try:
+            use_shell = sys.platform == "win32" and abaqus_cmd.lower().endswith(".bat")
             result = subprocess.run(
                 [abaqus_cmd, "information=release"],
                 capture_output=True, text=True, timeout=15,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                shell=use_shell,
             )
             output = result.stdout + result.stderr
             if "Abaqus" in output or "abaqus" in output.lower():
@@ -303,10 +305,11 @@ def scan_odb():
     # Run probe script via Abaqus
     try:
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        use_shell = sys.platform == "win32" and abaqus_cmd.lower().endswith(".bat")
         result = subprocess.run(
             [abaqus_cmd, "cae", "noGUI=%s" % probe_script],
             capture_output=True, text=True, timeout=300,
-            cwd=temp_dir, creationflags=flags,
+            cwd=temp_dir, creationflags=flags, shell=use_shell,
         )
 
         if not os.path.isfile(output_json):
@@ -1010,10 +1013,12 @@ def run_script():
 
     try:
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        # On Windows, .bat files must be run via shell
+        use_shell = sys.platform == "win32" and abaqus_cmd.lower().endswith(".bat")
         _process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, cwd=working_dir, creationflags=flags,
-            bufsize=1,
+            bufsize=1, shell=use_shell,
         )
         _run_start_time = time.time()
         _run_status = "running"
