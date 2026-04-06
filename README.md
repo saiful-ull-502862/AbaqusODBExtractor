@@ -66,6 +66,46 @@ AbaqusODBExtractor/
 └── README.md
 ```
 
+## Troubleshooting: Abaqus Not Found
+
+If you see the error `[ERROR] Abaqus command not found: abaqus`, it means the app can't locate your Abaqus installation. Follow these steps:
+
+### Step 1: Find the Abaqus path
+
+Open **PowerShell** and run:
+
+```powershell
+Get-ChildItem -Path C:\ -Filter "abaqus.bat" -Recurse -ErrorAction SilentlyContinue | Select FullName
+```
+
+This searches your entire C: drive (may take a minute). You'll get a result like:
+
+```
+C:\SIMULIA\Abaqus\Commands\abaqus.bat
+```
+
+### Step 2: Enter the path in the app
+
+1. Go to **Step 7 (Execute)** in the app
+2. Paste the full path into the **Abaqus Configuration** field
+3. Click **Auto-detect** to verify it works
+
+### Common Abaqus Paths
+
+| Version | Typical Path |
+|---------|-------------|
+| Abaqus 6.14 | `C:\SIMULIA\Abaqus\Commands\abaqus.bat` |
+| Abaqus 2020-2025 | `C:\SIMULIA\Commands\abaqus.bat` |
+| Abaqus (alt) | `C:\SIMULIA\EstProducts\Commands\abaqus.bat` |
+| Abaqus (Dassault) | `C:\Program Files\Dassault Systemes\SimulationServices\V6R20XX\win_b64\code\bin\ABQLauncher.exe` |
+
+## Compatibility
+
+Tested with:
+- Abaqus 6.14
+- Abaqus 2023
+- Should work with any Abaqus version that supports `abaqus cae noGUI` or `abaqus python` commands
+
 ## Features
 
 - Browse and select ODB files via native file dialog

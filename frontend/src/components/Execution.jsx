@@ -402,6 +402,23 @@ export default function Execution() {
             {s.abaqusDetected ? '  ' : '  '}{s.abaqusVersion}
           </p>
         )}
+        {s.abaqusVersion && !s.abaqusDetected && (
+          <div className="mt-3 p-3 rounded-lg bg-yellow-900/20 border border-yellow-700/30 text-xs text-yellow-200/90 space-y-2">
+            <h4 className="font-semibold text-yellow-300">Abaqus not found? Follow these steps:</h4>
+            <ol className="list-decimal list-inside space-y-1.5 text-yellow-200/70">
+              <li>Open <span className="font-mono bg-yellow-900/40 px-1 rounded">PowerShell</span> on this PC</li>
+              <li>Run this command to find the Abaqus path:
+                <div className="mt-1 p-2 bg-gray-950 rounded font-mono text-[11px] text-gray-300 select-all">
+                  Get-ChildItem -Path C:\ -Filter "abaqus.bat" -Recurse -ErrorAction SilentlyContinue | Select FullName
+                </div>
+              </li>
+              <li>Copy the full path from the result (e.g. <span className="font-mono text-gray-300">C:\SIMULIA\Abaqus\Commands\abaqus.bat</span>)</li>
+              <li>Paste it into the Abaqus Configuration field above</li>
+              <li>Click <span className="font-semibold text-yellow-300">Auto-detect</span> to verify</li>
+            </ol>
+            <p className="text-yellow-200/50 mt-1">Common paths: <span className="font-mono">C:\SIMULIA\Abaqus\Commands\abaqus.bat</span>, <span className="font-mono">C:\SIMULIA\Commands\abaqus.bat</span></p>
+          </div>
+        )}
       </div>
 
       {/* Execution Mode */}

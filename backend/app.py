@@ -81,8 +81,17 @@ def browse_dir():
 
 ABAQUS_SEARCH_PATHS = [
     "abaqus",
+    # Common SIMULIA installations (various versions)
     r"C:\SIMULIA\Abaqus\Commands\abaqus.bat",
     r"C:\SIMULIA\Commands\abaqus.bat",
+    r"C:\SIMULIA\EstProducts\Commands\abaqus.bat",
+    # Abaqus 2020-2025 (Dassault Systemes newer layout)
+    r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2023\win_b64\code\bin\ABQLauncher.exe",
+    r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2024\win_b64\code\bin\ABQLauncher.exe",
+    r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2025\win_b64\code\bin\ABQLauncher.exe",
+    r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2022\win_b64\code\bin\ABQLauncher.exe",
+    r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2021\win_b64\code\bin\ABQLauncher.exe",
+    r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2020\win_b64\code\bin\ABQLauncher.exe",
     r"C:\Program Files\Dassault Systemes\SimulationServices\V6R2014\win_b64\code\bin\ABQLauncher.exe",
 ]
 
