@@ -1114,19 +1114,29 @@ def stop_run():
 
 def _post_process_to_excel(output_dir):
     """
-    Read consolidated CSVs and metadata from output_dir,
-    create one Excel file per element set with sheets for each variable's
-    max/min values.
+    Read consolidated CSVs and metadata from output_dir.
+    Creates plot-ready Excel files organized by Loading vs Relaxation phases.
 
-    For 1D sweep: rows = step names, columns = position labels (X or Y)
-    For 2D sweep: rows = Y position labels, columns = X position labels
-                  (one block per step, or separate sheets per step if multiple)
+    Steps are classified as:
+      - Loading:     1st, 3rd, 5th, 7th, 9th, ... (odd-indexed steps)
+      - Relaxation:  2nd, 4th, 6th, 8th, 10th, ... (even-indexed steps)
+
+    Sheet structure for 1D sweep (e.g. X sweep):
+      "S22_Max_Loading"  => rows=X positions, columns=Loading step names
+      "S22_Min_Loading"  => rows=X positions, columns=Loading step names
+      "S22_Max_Relax"    => rows=X positions, columns=Relaxation step names
+      "S22_Min_Relax"    => rows=X positions, columns=Relaxation step names
+
+    For 2D sweep: one sheet per phase+stat with stacked blocks per step.
+
+    Also creates a "Summary" sheet with peak values per step per variable.
     """
     import csv
 
     try:
         from openpyxl import Workbook
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, numbers
+        from openpyxl.utils import get_column_letter
     except ImportError:
         return {"error": "openpyxl not installed. Run: pip install openpyxl"}
 
@@ -1144,6 +1154,76 @@ def _post_process_to_excel(output_dir):
     step_names = meta["step_names"]
     element_sets = meta["element_sets"]
 
+    # Classify steps into Loading (odd: 1st, 3rd, ...) and Relaxation (even: 2nd, 4th, ...)
+    loading_steps = [s for i, s in enumerate(step_names) if i % 2 == 0]
+    relaxation_steps = [s for i, s in enumerate(step_names) if i % 2 == 1]
+
+    # If only 1 step, treat it as loading only
+    if len(step_names) == 1:
+        loading_steps = step_names
+        relaxation_steps = []
+
+    # Style definitions
+    header_font = Font(bold=True, size=10)
+    header_fill_dark = PatternFill(start_color="2D3748", end_color="2D3748", fill_type="solid")
+    header_font_white = Font(bold=True, size=10, color="FFFFFF")
+    loading_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+    loading_font = Font(bold=True, size=10, color="90CDF4")
+    relax_fill = PatternFill(start_color="322659", end_color="322659", fill_type="solid")
+    relax_font = Font(bold=True, size=10, color="D6BCFA")
+    summary_header_fill = PatternFill(start_color="1A202C", end_color="1A202C", fill_type="solid")
+    summary_header_font = Font(bold=True, size=11, color="FFFFFF")
+    thin_border = Border(
+        left=Side(style="thin", color="CCCCCC"),
+        right=Side(style="thin", color="CCCCCC"),
+        top=Side(style="thin", color="CCCCCC"),
+        bottom=Side(style="thin", color="CCCCCC"),
+    )
+    pos_label_font = Font(bold=False, size=10, color="A0AEC0")
+    pos_label_fill = PatternFill(start_color="1A202C", end_color="1A202C", fill_type="solid")
+
+    def _auto_fit(ws):
+        for col in ws.columns:
+            max_len = 0
+            for cell in col:
+                if cell.value is not None:
+                    max_len = max(max_len, len(str(cell.value)))
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 22)
+
+    def _style_header_row(ws, row_num, num_cols, fill=None, font=None):
+        for c in range(1, num_cols + 1):
+            cell = ws.cell(row=row_num, column=c)
+            cell.font = font or header_font_white
+            cell.fill = fill or header_fill_dark
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal="center")
+
+    def _write_value(ws, row_num, col_num, val_str):
+        try:
+            val = float(val_str)
+            cell = ws.cell(row=row_num, column=col_num, value=val)
+            cell.number_format = '0.0000E+00'
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal="center")
+        except (ValueError, TypeError):
+            cell = ws.cell(row=row_num, column=col_num, value=val_str)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal="center")
+
+    def _write_pos_label(ws, row_num, col_num, value):
+        cell = ws.cell(row=row_num, column=col_num, value=value)
+        cell.font = pos_label_font
+        cell.fill = pos_label_fill
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal="center")
+
+    def _safe_sheet_name(name, max_len=31):
+        """Truncate and sanitize sheet name to Excel's 31-char limit."""
+        # Remove invalid chars
+        for ch in ['\\', '/', '*', '?', ':', '[', ']']:
+            name = name.replace(ch, '')
+        return name[:max_len]
+
     excel_files = []
 
     for elset_name in element_sets:
@@ -1153,7 +1233,7 @@ def _post_process_to_excel(output_dir):
         if not os.path.isfile(csv_path):
             continue
 
-        # Read CSV data (skip comment lines)
+        # Read CSV data
         rows = []
         with open(csv_path, "r") as f:
             reader = csv.reader(f)
@@ -1169,20 +1249,17 @@ def _post_process_to_excel(output_dir):
         if not header_row or not rows:
             continue
 
-        # Parse header to find column indices
         col_map = {name: idx for idx, name in enumerate(header_row)}
 
-        # Build data lookup: data[(step, xi, yi)][var_label] = (max_val, min_val)
+        # Build data: data[(step, xi, yi)][var_label] = (max_val, min_val)
         data = {}
         for row in rows:
             step = row[col_map["Step"]]
             xi = int(row[col_map["Xi"]])
             yi = int(row[col_map["Yi"]])
             key = (step, xi, yi)
-
             if key not in data:
                 data[key] = {}
-
             for label in header_labels:
                 max_col = "%s_Max" % label
                 min_col = "%s_Min" % label
@@ -1190,132 +1267,253 @@ def _post_process_to_excel(output_dir):
                 min_val = row[col_map[min_col]] if min_col in col_map else "N/A"
                 data[key][label] = (max_val, min_val)
 
-        # Create Excel workbook
         wb = Workbook()
-        # Remove default sheet
         if wb.sheetnames:
             wb.remove(wb.active)
 
-        header_font = Font(bold=True, size=10)
-        header_fill = PatternFill(start_color="2D3748", end_color="2D3748", fill_type="solid")
-        header_font_white = Font(bold=True, size=10, color="FFFFFF")
-        thin_border = Border(
-            left=Side(style="thin", color="CCCCCC"),
-            right=Side(style="thin", color="CCCCCC"),
-            top=Side(style="thin", color="CCCCCC"),
-            bottom=Side(style="thin", color="CCCCCC"),
-        )
+        # =============================================
+        # SUMMARY SHEET
+        # =============================================
+        ws_sum = wb.create_sheet(title="Summary")
+        ws_sum.cell(row=1, column=1, value="Element Set: %s" % set_short)
+        ws_sum.cell(row=1, column=1).font = Font(bold=True, size=14, color="FFFFFF")
+        ws_sum.cell(row=2, column=1, value="Steps: %d (%d Loading + %d Relaxation)" % (
+            len(step_names), len(loading_steps), len(relaxation_steps)))
+        ws_sum.cell(row=2, column=1).font = Font(size=10, color="A0AEC0")
+        ws_sum.cell(row=3, column=1, value="Regions: %d" % (len(x_labels) * max(len(y_labels), 1)))
+        ws_sum.cell(row=3, column=1).font = Font(size=10, color="A0AEC0")
 
-        def _auto_fit(ws):
-            """Auto-fit column widths (approximate)."""
-            for col in ws.columns:
-                max_len = 0
-                for cell in col:
-                    if cell.value:
-                        max_len = max(max_len, len(str(cell.value)))
-                ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 20)
+        # Summary table: peak values across all regions per step per variable
+        sum_row = 5
+        ws_sum.cell(row=sum_row, column=1, value="Step")
+        ws_sum.cell(row=sum_row, column=2, value="Phase")
+        col_idx = 3
+        for label in header_labels:
+            ws_sum.cell(row=sum_row, column=col_idx, value="%s Max" % label)
+            ws_sum.cell(row=sum_row, column=col_idx + 1, value="%s Min" % label)
+            col_idx += 2
+        _style_header_row(ws_sum, sum_row, col_idx - 1, summary_header_fill, summary_header_font)
 
-        def _style_header_row(ws, row, num_cols):
-            """Apply dark header styling to a row."""
-            for c in range(1, num_cols + 1):
-                cell = ws.cell(row=row, column=c)
-                cell.font = header_font_white
-                cell.fill = header_fill
-                cell.border = thin_border
-                cell.alignment = Alignment(horizontal="center")
+        for step_idx, step in enumerate(step_names):
+            r = sum_row + step_idx + 1
+            phase = "Loading" if step in loading_steps else "Relaxation"
+            ws_sum.cell(row=r, column=1, value=step).border = thin_border
+            phase_cell = ws_sum.cell(row=r, column=2, value=phase)
+            phase_cell.border = thin_border
+            if phase == "Loading":
+                phase_cell.font = loading_font
+                phase_cell.fill = loading_fill
+            else:
+                phase_cell.font = relax_font
+                phase_cell.fill = relax_fill
 
-        def _write_value(ws, row, col, val_str):
-            """Write a numeric or string value with formatting."""
-            try:
-                val = float(val_str)
-                cell = ws.cell(row=row, column=col, value=val)
-                cell.number_format = '0.00000000E+00'
-                cell.border = thin_border
-            except (ValueError, TypeError):
-                cell = ws.cell(row=row, column=col, value=val_str)
-                cell.border = thin_border
+            col_idx = 3
+            for label in header_labels:
+                # Find peak across all regions for this step
+                peak_max = None
+                peak_min = None
+                all_xi = range(len(x_labels)) if x_labels else [0]
+                all_yi = range(len(y_labels)) if y_labels else [0]
+                for xi in all_xi:
+                    for yi in all_yi:
+                        key = (step, xi, yi)
+                        if key in data and label in data[key]:
+                            try:
+                                mv = float(data[key][label][0])
+                                if peak_max is None or mv > peak_max:
+                                    peak_max = mv
+                            except (ValueError, TypeError):
+                                pass
+                            try:
+                                nv = float(data[key][label][1])
+                                if peak_min is None or nv < peak_min:
+                                    peak_min = nv
+                            except (ValueError, TypeError):
+                                pass
+
+                if peak_max is not None:
+                    _write_value(ws_sum, r, col_idx, "%.8e" % peak_max)
+                else:
+                    ws_sum.cell(row=r, column=col_idx, value="N/A").border = thin_border
+                if peak_min is not None:
+                    _write_value(ws_sum, r, col_idx + 1, "%.8e" % peak_min)
+                else:
+                    ws_sum.cell(row=r, column=col_idx + 1, value="N/A").border = thin_border
+                col_idx += 2
+
+        _auto_fit(ws_sum)
+
+        # =============================================
+        # DATA SHEETS: one per variable x stat x phase
+        # =============================================
+        phases = [("Loading", loading_steps, loading_fill, loading_font),
+                  ("Relax", relaxation_steps, relax_fill, relax_font)]
 
         for label in header_labels:
-            for stat_type in ["Max", "Min"]:
+            for stat_type, stat_idx in [("Max", 0), ("Min", 1)]:
+                for phase_name, phase_steps, phase_fill, phase_font in phases:
+                    if not phase_steps:
+                        continue
 
-                if is_2d:
-                    # 2D sweep: one sheet per step per variable per stat
-                    # Sheet layout: rows = Y positions, columns = X positions
-                    for step_idx, step in enumerate(step_names):
-                        # Build sheet name: "S22_Max_Step-1" (max 31 chars)
-                        step_short = step.replace(" ", "")
-                        sheet_name = "%s_%s_%s" % (label, stat_type, step_short)
-                        if len(sheet_name) > 31:
-                            # Truncate step part to fit
-                            avail = 31 - len(label) - len(stat_type) - 2  # 2 underscores
-                            sheet_name = "%s_%s_%s" % (label, stat_type, step_short[:avail])
+                    sheet_name = _safe_sheet_name("%s_%s_%s" % (label, stat_type, phase_name))
+                    ws = wb.create_sheet(title=sheet_name)
 
-                        ws = wb.create_sheet(title=sheet_name)
+                    if is_2d:
+                        # 2D sweep: stacked blocks, one per step
+                        # Each block: rows=Y positions, columns=X positions
+                        current_row = 1
+                        for step in phase_steps:
+                            # Step header
+                            ws.cell(row=current_row, column=1,
+                                    value="%s  |  %s %s  |  %s" % (step, label, stat_type, phase_name))
+                            ws.cell(row=current_row, column=1).font = phase_font
+                            ws.cell(row=current_row, column=1).fill = phase_fill
+                            ws.merge_cells(start_row=current_row, start_column=1,
+                                           end_row=current_row, end_column=len(x_labels) + 1)
+                            current_row += 1
 
-                        # Corner cell
-                        ws.cell(row=1, column=1, value="Y \\ X")
+                            # Column headers (X labels)
+                            ws.cell(row=current_row, column=1, value="Y \\ X")
+                            for ci, xl in enumerate(x_labels):
+                                ws.cell(row=current_row, column=ci + 2, value=xl)
+                            _style_header_row(ws, current_row, len(x_labels) + 1)
+                            current_row += 1
 
-                        # Column headers (X labels)
-                        for ci, xl in enumerate(x_labels):
-                            ws.cell(row=1, column=ci + 2, value=xl)
+                            # Data rows (Y labels)
+                            for yi_idx, yl in enumerate(y_labels):
+                                _write_pos_label(ws, current_row, 1, yl)
+                                for xi_idx in range(len(x_labels)):
+                                    key = (step, xi_idx, yi_idx)
+                                    if key in data and label in data[key]:
+                                        _write_value(ws, current_row, xi_idx + 2,
+                                                     data[key][label][stat_idx])
+                                current_row += 1
 
-                        _style_header_row(ws, 1, len(x_labels) + 1)
+                            current_row += 1  # Blank row between blocks
 
-                        # Data rows (Y labels)
-                        for yi_idx, yl in enumerate(y_labels):
-                            row_num = yi_idx + 2
-                            # Y label in first column
-                            cell = ws.cell(row=row_num, column=1, value=yl)
-                            cell.font = header_font_white
-                            cell.fill = header_fill
-                            cell.border = thin_border
-                            cell.alignment = Alignment(horizontal="center")
+                    else:
+                        # 1D sweep: rows=positions, columns=step names
+                        # This is the plot-friendly format!
+                        pos_labels = x_labels if len(x_labels) > 1 else y_labels
+                        pos_axis = "X" if len(x_labels) > 1 else "Y"
 
-                            for xi_idx in range(len(x_labels)):
-                                key = (step, xi_idx, yi_idx)
-                                if key in data and label in data[key]:
-                                    val_str = data[key][label][0 if stat_type == "Max" else 1]
-                                    _write_value(ws, row_num, xi_idx + 2, val_str)
+                        # Title row
+                        ws.cell(row=1, column=1,
+                                value="%s  |  %s %s  |  %s" % (set_short, label, stat_type, phase_name))
+                        ws.cell(row=1, column=1).font = Font(bold=True, size=12, color="FFFFFF")
+                        ws.merge_cells(start_row=1, start_column=1,
+                                       end_row=1, end_column=len(phase_steps) + 1)
+                        ws.cell(row=1, column=1).fill = phase_fill
 
-                        _auto_fit(ws)
-
-                else:
-                    # 1D sweep: one sheet per step per variable per stat
-                    # Sheet layout: rows = position labels, single value column
-                    pos_labels = x_labels if len(x_labels) > 1 else y_labels
-                    pos_axis = "X" if len(x_labels) > 1 else "Y"
-
-                    for step_idx, step in enumerate(step_names):
-                        step_short = step.replace(" ", "")
-                        sheet_name = "%s_%s_%s" % (label, stat_type, step_short)
-                        if len(sheet_name) > 31:
-                            avail = 31 - len(label) - len(stat_type) - 2
-                            sheet_name = "%s_%s_%s" % (label, stat_type, step_short[:avail])
-
-                        ws = wb.create_sheet(title=sheet_name)
-
-                        # Header row
-                        ws.cell(row=1, column=1, value="Position (%s)" % pos_axis)
-                        ws.cell(row=1, column=2, value="%s %s" % (label, stat_type))
-                        _style_header_row(ws, 1, 2)
+                        # Header row: Position | Step1 | Step2 | ...
+                        ws.cell(row=2, column=1, value="Position_%s (mm)" % pos_axis)
+                        for si, step in enumerate(phase_steps):
+                            ws.cell(row=2, column=si + 2, value=step)
+                        _style_header_row(ws, 2, len(phase_steps) + 1, phase_fill, phase_font)
 
                         # Data rows
                         for ci, pl in enumerate(pos_labels):
-                            row_num = ci + 2
-                            cell = ws.cell(row=row_num, column=1, value=pl)
-                            cell.font = header_font
+                            row_num = ci + 3
+                            _write_pos_label(ws, row_num, 1, pl)
+
+                            for si, step in enumerate(phase_steps):
+                                if pos_axis == "X":
+                                    key = (step, ci, 0)
+                                else:
+                                    key = (step, 0, ci)
+
+                                if key in data and label in data[key]:
+                                    _write_value(ws, row_num, si + 2, data[key][label][stat_idx])
+
+                    _auto_fit(ws)
+
+        # =============================================
+        # ALL-STEPS SHEETS (for single-step or custom use)
+        # One sheet per variable+stat with ALL steps as columns
+        # =============================================
+        if len(step_names) > 1:
+            for label in header_labels:
+                for stat_type, stat_idx in [("Max", 0), ("Min", 1)]:
+                    sheet_name = _safe_sheet_name("%s_%s_AllSteps" % (label, stat_type))
+                    ws = wb.create_sheet(title=sheet_name)
+
+                    pos_labels = x_labels if len(x_labels) > 1 else y_labels
+                    pos_axis = "X" if len(x_labels) > 1 else "Y"
+
+                    if is_2d:
+                        # For 2D, create stacked blocks for all steps
+                        current_row = 1
+                        for step in step_names:
+                            step_idx = step_names.index(step)
+                            phase = "Loading" if step in loading_steps else "Relaxation"
+                            pf = loading_fill if phase == "Loading" else relax_fill
+                            pfont = loading_font if phase == "Loading" else relax_font
+
+                            ws.cell(row=current_row, column=1,
+                                    value="%s  |  %s %s  |  %s" % (step, label, stat_type, phase))
+                            ws.cell(row=current_row, column=1).font = pfont
+                            ws.cell(row=current_row, column=1).fill = pf
+                            ws.merge_cells(start_row=current_row, start_column=1,
+                                           end_row=current_row, end_column=len(x_labels) + 1)
+                            current_row += 1
+
+                            ws.cell(row=current_row, column=1, value="Y \\ X")
+                            for ci, xl in enumerate(x_labels):
+                                ws.cell(row=current_row, column=ci + 2, value=xl)
+                            _style_header_row(ws, current_row, len(x_labels) + 1)
+                            current_row += 1
+
+                            for yi_idx, yl in enumerate(y_labels):
+                                _write_pos_label(ws, current_row, 1, yl)
+                                for xi_idx in range(len(x_labels)):
+                                    key = (step, xi_idx, yi_idx)
+                                    if key in data and label in data[key]:
+                                        _write_value(ws, current_row, xi_idx + 2,
+                                                     data[key][label][stat_idx])
+                                current_row += 1
+                            current_row += 1
+                    else:
+                        # 1D: rows=positions, columns=ALL step names
+                        ws.cell(row=1, column=1,
+                                value="%s  |  %s %s  |  All Steps" % (set_short, label, stat_type))
+                        ws.cell(row=1, column=1).font = Font(bold=True, size=12, color="FFFFFF")
+                        ws.merge_cells(start_row=1, start_column=1,
+                                       end_row=1, end_column=len(step_names) + 1)
+                        ws.cell(row=1, column=1).fill = header_fill_dark
+
+                        # Header with color-coded step names
+                        ws.cell(row=2, column=1, value="Position_%s (mm)" % pos_axis)
+                        for si, step in enumerate(step_names):
+                            cell = ws.cell(row=2, column=si + 2, value=step)
                             cell.border = thin_border
-
-                            if pos_axis == "X":
-                                key = (step, ci, 0)
+                            cell.alignment = Alignment(horizontal="center")
+                            if step in loading_steps:
+                                cell.font = loading_font
+                                cell.fill = loading_fill
                             else:
-                                key = (step, 0, ci)
+                                cell.font = relax_font
+                                cell.fill = relax_fill
 
-                            if key in data and label in data[key]:
-                                val_str = data[key][label][0 if stat_type == "Max" else 1]
-                                _write_value(ws, row_num, 2, val_str)
+                        # Style position header
+                        pos_cell = ws.cell(row=2, column=1)
+                        pos_cell.font = header_font_white
+                        pos_cell.fill = header_fill_dark
+                        pos_cell.border = thin_border
 
-                        _auto_fit(ws)
+                        # Data rows
+                        for ci, pl in enumerate(pos_labels):
+                            row_num = ci + 3
+                            _write_pos_label(ws, row_num, 1, pl)
+
+                            for si, step in enumerate(step_names):
+                                if pos_axis == "X":
+                                    key = (step, ci, 0)
+                                else:
+                                    key = (step, 0, ci)
+                                if key in data and label in data[key]:
+                                    _write_value(ws, row_num, si + 2, data[key][label][stat_idx])
+
+                    _auto_fit(ws)
 
         # Save Excel
         excel_filename = "%s_Results.xlsx" % set_short
