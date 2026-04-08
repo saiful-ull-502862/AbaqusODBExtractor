@@ -805,8 +805,8 @@ for elset_name in ELEMENT_SET_NAMES:
         f.write('# Element Set: %s\n' % elset_name)
         f.write('# Total Regions: %d\n' % total_regions)
         f.write('# 2D Sweep: %s\n' % ('Yes' if IS_2D_SWEEP else 'No'))
-        f.write('# X Labels: %s\n' % ','.join([str(x) for x in X_LABELS]))
-        f.write('# Y Labels: %s\n' % ','.join([str(y) for y in Y_LABELS]))
+        f.write('# X Labels: %s\n' % '; '.join([str(x) for x in X_LABELS]))
+        f.write('# Y Labels: %s\n' % '; '.join([str(y) for y in Y_LABELS]))
         f.write('#\n')
         f.write(','.join(csv_header) + '\n')
         for row in csv_rows:
@@ -844,6 +844,35 @@ print('Metadata written to: %s' % meta_path)
 
 odb.close()
 print('\nDone. ODB closed.')
+
+# ============================================================================
+# AUTO-GENERATE EXCEL WORKBOOK (runs via system Python 3, not Abaqus Python)
+# ============================================================================
+import subprocess as _sp
+
+_converter = os.path.join(OUTPUT_DIR, 'format_to_excel.py')
+if os.path.isfile(_converter):
+    print('\n' + '=' * 70)
+    print('  GENERATING EXCEL WORKBOOKS ...')
+    print('=' * 70)
+    _excel_ok = False
+    for _py in ['python', 'python3', 'py']:
+        try:
+            _rc = _sp.call([_py, _converter], cwd=OUTPUT_DIR)
+            if _rc == 0:
+                _excel_ok = True
+                break
+        except Exception:
+            continue
+    if not _excel_ok:
+        print('  [WARNING] Could not generate Excel. Run manually:')
+        print('    python format_to_excel.py')
+        print('  from: %s' % OUTPUT_DIR)
+else:
+    print('\n  [INFO] format_to_excel.py not found in output directory.')
+    print('  To generate Excel workbooks, place format_to_excel.py in:')
+    print('    %s' % OUTPUT_DIR)
+    print('  Then run: python format_to_excel.py')
 '''
 
 
@@ -919,6 +948,35 @@ def _build_extraction_script(data):
     )
 
 
+def _deploy_excel_converter(target_dir):
+    """Copy the bundled format_to_excel.py to the target directory."""
+    if not target_dir or not os.path.isdir(target_dir):
+        return
+    dest = os.path.join(target_dir, "format_to_excel.py")
+    # Look for the converter relative to this app.py
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "format_to_excel.py"),
+        os.path.join(os.path.dirname(__file__), "..", "format_to_excel.py"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "Results", "format_to_excel.py"),
+    ]
+    source = None
+    for c in candidates:
+        if os.path.isfile(c):
+            source = c
+            break
+
+    if source is None:
+        # No bundled converter found; skip silently
+        return
+
+    # Copy (or update) the converter
+    import shutil
+    try:
+        shutil.copy2(source, dest)
+    except Exception:
+        pass
+
+
 @app.route("/api/generate-script", methods=["POST"])
 def generate_script():
     """Generate the Abaqus extraction script and save it."""
@@ -936,6 +994,9 @@ def generate_script():
     with open(script_path, "w") as f:
         f.write(script_content)
 
+    # Also copy the Excel converter script to the output directory
+    _deploy_excel_converter(os.path.dirname(script_path))
+
     return jsonify({
         "scriptPath": script_path,
         "scriptContent": script_content,
@@ -946,7 +1007,7 @@ def generate_script():
 # SCRIPT EXECUTION
 # ============================================================================
 
-def _stream_output(proc):
+def _stream_output(proc, output_dir=None):
     """Read stdout/stderr from process and put into log queue."""
     global _run_status
 
@@ -984,6 +1045,18 @@ def _stream_output(proc):
     if proc.returncode == 0:
         _run_status = "completed"
         _log_queue.put("[SYSTEM] Extraction completed successfully.")
+        # Auto-generate formatted Excel workbook
+        if output_dir and os.path.isdir(output_dir):
+            _log_queue.put("[SYSTEM] Generating formatted Excel workbook...")
+            try:
+                result = _post_process_to_excel(output_dir)
+                if "error" in result:
+                    _log_queue.put("[SYSTEM] Excel generation failed: %s" % result["error"])
+                else:
+                    for ep in result.get("excelFiles", []):
+                        _log_queue.put("[SYSTEM] Excel saved: %s" % ep)
+            except Exception as e:
+                _log_queue.put("[SYSTEM] Excel generation error: %s" % str(e))
     else:
         _run_status = "failed"
         _log_queue.put("[SYSTEM] Process exited with code %d" % proc.returncode)
@@ -1048,8 +1121,8 @@ def run_script():
         _log_queue.put("[SYSTEM] Started: %s" % (cmd if isinstance(cmd, str) else " ".join(cmd)))
         _log_queue.put("[SYSTEM] Working directory: %s" % working_dir)
 
-        # Start output streaming thread
-        t = threading.Thread(target=_stream_output, args=(_process,))
+        # Start output streaming thread (pass output_dir for auto Excel generation)
+        t = threading.Thread(target=_stream_output, args=(_process, working_dir))
         t.daemon = True
         t.start()
 
