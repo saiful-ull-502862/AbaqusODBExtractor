@@ -27,7 +27,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 
-# ── Style definitions ───────────────────────────────────────────────────────
+# -- Style definitions --------------------------------------------------------
 HEADER_FILL_DARK = PatternFill(start_color="2D3748", end_color="2D3748", fill_type="solid")
 HEADER_FONT_WHITE = Font(bold=True, size=10, color="FFFFFF")
 LOADING_FILL = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
@@ -96,7 +96,7 @@ def _safe_sheet_name(name, max_len=31):
     return name[:max_len]
 
 
-# ── Parse the consolidated CSV ──────────────────────────────────────────────
+# -- Parse the consolidated CSV -----------------------------------------------
 def parse_csv(csv_path):
     """Return metadata dict, header list, and data rows."""
     meta = {}
@@ -198,7 +198,7 @@ def build_data(rows, var_labels):
     return x_labels, y_labels, step_order, data
 
 
-# ── Write Summary sheet ─────────────────────────────────────────────────────
+# -- Write Summary sheet -------------------------------------------------------
 def write_summary(wb, set_name, var_labels, x_labels, y_labels, step_order,
                   loading_steps, relaxation_steps, data):
     ws = wb.create_sheet(title="Summary")
@@ -276,7 +276,7 @@ def write_summary(wb, set_name, var_labels, x_labels, y_labels, step_order,
     _auto_fit(ws)
 
 
-# ── Write per-variable data sheets ──────────────────────────────────────────
+# -- Write per-variable data sheets --------------------------------------------
 def write_variable_sheets(wb, var_labels, x_labels, y_labels, step_order,
                           loading_steps, relaxation_steps, data, is_2d, set_name):
     phases = [
@@ -289,7 +289,7 @@ def write_variable_sheets(wb, var_labels, x_labels, y_labels, step_order,
 
     for label in var_labels:
         for stat_type, stat_idx in [("Max", 0), ("Min", 1)]:
-            # ── Phase-specific sheets (Loading / Relaxation) ──
+            # -- Phase-specific sheets (Loading / Relaxation) --
             for phase_name, phase_steps, phase_fill, phase_font in phases:
                 if not phase_steps:
                     continue
@@ -307,7 +307,7 @@ def write_variable_sheets(wb, var_labels, x_labels, y_labels, step_order,
                                    pos_labels, pos_axis, data, set_name)
                 _auto_fit(ws)
 
-            # ── AllSteps sheet ──
+            # -- AllSteps sheet --
             if len(step_order) > 1:
                 sheet_name = _safe_sheet_name("%s_%s_AllSteps" % (label, stat_type))
                 ws = wb.create_sheet(title=sheet_name)
@@ -450,7 +450,7 @@ def _write_2d_sheet(ws, label, stat_type, stat_idx, phase_name,
         current_row += 1  # blank row between step blocks
 
 
-# ── Main ────────────────────────────────────────────────────────────────────
+# -- Main ---------------------------------------------------------------------
 def convert_csv_to_excel(csv_path, xlsx_path=None):
     """Convert a consolidated CSV to a formatted, plot-ready Excel workbook."""
     base = os.path.splitext(os.path.basename(csv_path))[0]
