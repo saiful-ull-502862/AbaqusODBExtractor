@@ -702,7 +702,14 @@ for elset_name in ELEMENT_SET_NAMES:
                 if field_key not in frame.fieldOutputs:
                     continue
 
-                field_output = frame.fieldOutputs[field_key]
+                field_output_full = frame.fieldOutputs[field_key]
+
+                # Subset to the element set FIRST — ensures we only see
+                # values belonging to this set (correct instance + material).
+                try:
+                    field_output = field_output_full.getSubset(region=elset)
+                except Exception:
+                    field_output = field_output_full   # fallback
 
                 is_nodal_field = False
                 if len(field_output.values) > 0:
