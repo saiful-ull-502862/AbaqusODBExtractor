@@ -363,7 +363,7 @@ EXTRACTION_SCRIPT_TEMPLATE = r'''# =============================================
 # Usage: abaqus cae noGUI=extract_region_sweep.py
 #        or: abaqus python extract_region_sweep.py
 #        or inside CAE: File > Run Script
-# Compatible with Abaqus Python 2.7 (Abaqus 6.14+)
+# Compatible with Abaqus 6.14+ (Python 2.7) and Abaqus 2023+ (Python 3.10)
 # ============================================================================
 
 from odbAccess import *
