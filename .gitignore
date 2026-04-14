@@ -1,0 +1,36 @@
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+.env
+dist/
+frontend/dist/
+frontend/.vite/
+
+# Abaqus output files
+*.odb
+*.sim
+*.rpy
+*.rpy.*
+*.com
+*.sta
+*.msg
+*.dat
+*.log
+*.lck
+*.prt
+*.mdl
+*.stt
+*.res
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Backend runtime
+backend/uploads/
