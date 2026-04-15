@@ -769,7 +769,6 @@ for elset_name in ELEMENT_SET_NAMES:
     results = {{}}
     frame_meta = {{}}  # (step_name, frame_idx) -> (frame_time, total_time)
 
-    cumulative_time = 0.0
     for si, step_name in enumerate(step_names):
         step = odb.steps[step_name]
 
@@ -781,10 +780,14 @@ for elset_name in ELEMENT_SET_NAMES:
         print('    Step %d/%d: %-12s | Frames: %d' % (si + 1, len(step_names), step_name, len(frames_to_process)))
         sys.stdout.flush()
 
+        # step.totalTime is the accumulated simulation time at the START of this step.
+        # Adding frame.frameValue gives the correct total simulation time for this frame.
+        step_start_time = step.totalTime
+
         for frame in frames_to_process:
             frame_idx  = frame.frameId
             frame_time = frame.frameValue
-            total_time = cumulative_time + frame_time
+            total_time = step_start_time + frame_time
             frame_meta[(step_name, frame_idx)] = (frame_time, total_time)
 
             # Initialize results for all non-empty regions
@@ -973,8 +976,6 @@ for elset_name in ELEMENT_SET_NAMES:
                 sys.stdout.flush()
                 continue
 
-        cumulative_time += step.totalTime
-
     extract_time = time.time() - extract_start
     print('  Extraction done (%.1f sec)' % extract_time)
     sys.stdout.flush()
@@ -991,7 +992,6 @@ for elset_name in ELEMENT_SET_NAMES:
         x_label = region_info.get('x_label', '')
         y_label = region_info.get('y_label', '')
 
-        cumulative_time = 0.0
         for step_name in step_names:
             step = odb.steps[step_name]
             if FRAME_SELECTION == 'LAST':
